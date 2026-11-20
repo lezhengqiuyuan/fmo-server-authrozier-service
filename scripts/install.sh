@@ -206,13 +206,22 @@ version_ge() {
 }
 
 fetch_manifest() {
-    SAS_META=$(curl -fsSL "$SAS_JSON_URL") || { err "无法获取 SAS 版本信息"; return 1; }
+    SAS_META=$(curl -fsSL --proto '=https' --proto-redir '=https' "$SAS_JSON_URL") || { err "无法获取 SAS 版本信息"; return 1; }
     VERSION=$(echo "$SAS_META" | sed -n 's/.*"version": *"\([^"]*\)".*/\1/p' | head -1)
     DOWNLOAD_URL=$(echo "$SAS_META" | sed -n "s/.*\"$RID\": *\"\([^\"]*\)\".*/\1/p" | head -1)
+    DOWNLOAD_SHA256=$(echo "$SAS_META" | sed -n "s/.*\"${RID}_sha256\": *\"\([^\"]*\)\".*/\1/p" | head -1)
 
     if [ -z "$VERSION" ] || [ -z "$DOWNLOAD_URL" ]; then
         err "无法解析版本信息，请检查网络连接"
         return 1
+    fi
+}
+
+sha256_of() {
+    if command -v sha256sum >/dev/null 2>&1; then
+        sha256sum "$1" | awk '{print $1}'
+    else
+        shasum -a 256 "$1" | awk '{print $1}'
     fi
 }
 
@@ -221,30 +230,46 @@ prepare_package() {
     local tar_file="$TMPDIR_INSTALL/sas.tar.gz"
     EXTRACT_DIR="$TMPDIR_INSTALL/extract"
 
-    curl -fL --progress-bar "$DOWNLOAD_URL" -o "$tar_file"
-    mkdir -p "$EXTRACT_DIR"
-    tar xzf "$tar_file" -C "$EXTRACT_DIR"
+    if [ -z "$DOWNLOAD_SHA256" ]; then
+        err "升级清单缺少 ${RID}_sha256，拒绝下载未校验的安装包"
+        return 1
+    fi
+
+    curl -fL --proto '=https' --proto-redir '=https' --progress-bar \
+        "$DOWNLOAD_URL" -o "$tar_file" || return 1
+
+    local actual_sha256
+    actual_sha256=$(sha256_of "$tar_file")
+    if [ "$actual_sha256" != "$DOWNLOAD_SHA256" ]; then
+        err "安装包校验失败: expected=$DOWNLOAD_SHA256 actual=$actual_sha256"
+        return 1
+    fi
+
+    mkdir -p "$EXTRACT_DIR" || return 1
+    tar xzf "$tar_file" -C "$EXTRACT_DIR" --no-same-owner || return 1
 
     if [ ! -f "$EXTRACT_DIR/sas" ]; then
         err "下载文件解压异常，未找到 sas 主程序"
         err "您可以尝试安装组件后重试，或手动部署，参考: https://bg5esn.com/docs/fmo-server-construction/"
         return 1
     fi
+    return 0
 }
 
 install_payload() {
-    mkdir -p "$INSTALL_DIR"
-    cp "$EXTRACT_DIR/sas" "$INSTALL_DIR/sas.new"
-    chmod +x "$INSTALL_DIR/sas.new"
-    mv -f "$INSTALL_DIR/sas.new" "$INSTALL_DIR/sas"
+    mkdir -p "$INSTALL_DIR" || return 1
+    cp "$EXTRACT_DIR/sas" "$INSTALL_DIR/sas.new" || return 1
+    chmod +x "$INSTALL_DIR/sas.new" || return 1
+    mv -f "$INSTALL_DIR/sas.new" "$INSTALL_DIR/sas" || return 1
 
     if [ -d "$EXTRACT_DIR/builtin" ]; then
-        rm -rf "$INSTALL_DIR/builtin"
-        cp -r "$EXTRACT_DIR/builtin" "$INSTALL_DIR/"
+        rm -rf "$INSTALL_DIR/builtin" || return 1
+        cp -r "$EXTRACT_DIR/builtin" "$INSTALL_DIR/" || return 1
     fi
 
-    rm -rf "$TMPDIR_INSTALL"
+    rm -rf "$TMPDIR_INSTALL" || true
     TMPDIR_INSTALL=""
+    return 0
 }
 
 service_stop() {
@@ -360,27 +385,29 @@ ensure_service_unit() {
     if [ "$OS" = "Linux" ]; then
         if [ ! -f "$SYSTEMD_UNIT" ]; then
             warn "      systemd 服务文件缺失，正在重建"
-            write_systemd_unit
-            systemctl enable fmo-sas > /dev/null 2>&1
+            write_systemd_unit || return 1
+            systemctl enable fmo-sas > /dev/null 2>&1 || return 1
         fi
-        systemctl daemon-reload
+        systemctl daemon-reload || return 1
     else
         if [ ! -f "$LAUNCHD_PLIST" ]; then
             warn "      launchd 服务文件缺失，正在重建"
-            write_launchd_plist
+            write_launchd_plist || return 1
         fi
     fi
+    return 0
 }
 
 backup_current() {
     BACKUP_DIR="$INSTALL_DIR/.backup-$(date +%Y%m%d%H%M%S)"
-    mkdir -p "$BACKUP_DIR"
-    cp -a "$INSTALL_DIR/sas" "$BACKUP_DIR/sas"
+    mkdir -p "$BACKUP_DIR" || return 1
+    cp -a "$INSTALL_DIR/sas" "$BACKUP_DIR/sas" || return 1
     if [ -d "$INSTALL_DIR/builtin" ]; then
-        cp -a "$INSTALL_DIR/builtin" "$BACKUP_DIR/builtin"
+        cp -a "$INSTALL_DIR/builtin" "$BACKUP_DIR/builtin" || return 1
     fi
     ok "      已备份当前版本到 $BACKUP_DIR"
     prune_backups
+    return 0
 }
 
 prune_backups() {
@@ -472,7 +499,10 @@ upgrade() {
     ok "      下载完成"
 
     info "[4/5] 覆盖安装程序..."
-    backup_current
+    if ! backup_current; then
+        err "      备份失败，已中止升级（服务未停止）"
+        exit 1
+    fi
     service_stop
     if ! install_payload; then
         rollback

@@ -523,14 +523,14 @@ public sealed class HttpAuthHandlerTests
     }
 
     [Fact]
-    public void Process_UsernameMismatch_DeniesAndCountsForBreaker()
+    public void Process_UsernameMismatch_DeniesWithoutBreakerKey()
     {
         using var env = new AuthTestEnvironment();
 
         var ex = Deny(env, username: "BG0AAA");
 
         Assert.Contains("username mismatch", ex.Message);
-        Assert.Equal(env.Pki.User.Callsign, ex.BreakerKey);
+        Assert.Null(ex.BreakerKey);
     }
 
     [Fact]
@@ -718,11 +718,11 @@ public sealed class HttpAuthHandlerTests
         var ex = Deny(env);
 
         Assert.Contains("server fingerprint mismatch", ex.Message);
-        Assert.Equal(env.Pki.User.Callsign, ex.BreakerKey);
+        Assert.Null(ex.BreakerKey);
     }
 
     [Fact]
-    public void Process_InvalidProofSignature_Denies()
+    public void Process_ReplayedCertPackageWithInvalidProof_DeniesWithoutBreakerKey()
     {
         using var env = new AuthTestEnvironment();
 
@@ -732,7 +732,7 @@ public sealed class HttpAuthHandlerTests
             proofSignature: Base64Url.Encode(new byte[64])));
 
         Assert.Contains("proof invalid", ex.Message);
-        Assert.Equal(env.Pki.User.Callsign, ex.BreakerKey);
+        Assert.Null(ex.BreakerKey);
     }
 
     // ---------------------------------------------------------------- archive

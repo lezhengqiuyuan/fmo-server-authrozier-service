@@ -34,7 +34,16 @@ jobs:
         run: dotnet restore Sas.sln
 
       - name: Build
-        run: dotnet build Sas.sln -c Release --no-restore
+        run: dotnet build Sas.sln -c Release --no-restore -warnaserror:NU1902,NU1903,NU1904
+
+      - name: Audit dependencies
+        shell: pwsh
+        run: |
+          $output = dotnet list src/Sas.csproj package --vulnerable --include-transitive 2>&1 | Out-String
+          Write-Host $output
+          if ($output -match 'following vulnerable packages') {
+              throw 'Vulnerable dependencies detected'
+          }
 
       - name: Unit tests
         run: dotnet test tests/Sas.Tests/Sas.Tests.csproj -c Release --no-build --filter "Category!=Integration"

@@ -137,10 +137,16 @@ Logger.Info($"  Version: {version}");
 Logger.Info($"  Archive: {(config.Archive.Enabled ? config.Archive.Dir : "(disabled)")}");
 Logger.Info($"  Rate limit: global={config.Http.RateLimit.GlobalPerMinute}/min breaker={(config.Http.RateLimit.BreakerEnabled ? "on" : "off")}");
 
-var rootStore = new RootCaStore(config.Trust.RootsDir);
+var rootsDir = Path.TrimEndingDirectorySeparator(Path.GetFullPath(config.Trust.RootsDir));
+Logger.Info($"  Roots: {rootsDir}");
+Logger.Info($"  Roles: {Path.Combine(Path.GetDirectoryName(rootsDir)!, "roles")}");
+Logger.Info($"  CRL: {Path.Combine(Path.GetDirectoryName(rootsDir)!, "crl")}");
+
+var rootStore = new RootCaStore(rootsDir);
 var verifier = new CertVerifier();
-var crlManager = new CrlManager(config.Trust.RootsDir, config.Crl.RefreshSec);
-var aclStore = AclStore.FromRootsDir(config.Trust.RootsDir);
+var crlManager = new CrlManager(rootsDir, config.Crl.RefreshSec,
+    allowInsecureHttp: config.Crl.AllowInsecure);
+var aclStore = AclStore.FromRootsDir(rootsDir, config.Acl?.AllowEmptyAcl ?? false);
 var archive = new AuthArchive(config.Archive);
 var rateLimiter = new AuthRateLimiter(config.Http.RateLimit);
 
@@ -175,6 +181,22 @@ if (config.Update.Enabled)
 
 using var cts = new CancellationTokenSource();
 
+ConsoleCancelEventHandler cancelHandler = (_, e) =>
+{
+    e.Cancel = true;
+    cts.Cancel();
+};
+Console.CancelKeyPress += cancelHandler;
+
+using var sigterm = OperatingSystem.IsWindows()
+    ? null
+    : PosixSignalRegistration.Create(PosixSignal.SIGTERM,
+        ctx => { ctx.Cancel = true; cts.Cancel(); });
+using var sigint = OperatingSystem.IsWindows()
+    ? null
+    : PosixSignalRegistration.Create(PosixSignal.SIGINT,
+        ctx => { ctx.Cancel = true; cts.Cancel(); });
+
 try
 {
     await httpServer.RunAsync(cts.Token);
@@ -184,12 +206,13 @@ catch (OperationCanceledException)
 }
 finally
 {
-    httpServer.Stop();
+    Console.CancelKeyPress -= cancelHandler;
+    await httpServer.StopAsync(TimeSpan.FromSeconds(5));
     archive.Flush();
+    Logger.Info("SAS stopped.");
+    Logger.Flush();
+    crlManager.Dispose();
 }
-
-Logger.Info("SAS stopped.");
-Logger.Flush();
 
 return;
 
@@ -256,7 +279,7 @@ static async Task CheckVersionAsync(string currentVersion)
         }
         else
         {
-            Logger.Warn("│  Upgrade: curl -fsSL https://bg5esn.com/share/fmo/sas-installer/install.sh -o /tmp/install.sh && sudo bash /tmp/install.sh --upgrade");
+            Logger.Warn("│  Upgrade: curl -fsSL --proto '=https' --proto-redir '=https' https://bg5esn.com/share/fmo/sas-installer/install.sh -o /tmp/install.sh && sudo bash /tmp/install.sh --upgrade");
         }
 
         Logger.Warn("└─────────────────────────────────────────────────────────────────────────────");
@@ -281,7 +304,7 @@ static async Task CheckUpdateCommand(bool autoYes)
     }
 
     const string installerUrl = "https://bg5esn.com/share/fmo/sas-installer/install.sh";
-    var command = $"curl -fsSL {installerUrl} -o /tmp/install.sh && sudo bash /tmp/install.sh --upgrade";
+    var command = $"curl -fsSL --proto '=https' --proto-redir '=https' {installerUrl} -o /tmp/install.sh && sudo bash /tmp/install.sh --upgrade";
 
     if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
     {
@@ -333,25 +356,39 @@ static async Task CheckUpdateCommand(bool autoYes)
 
     try
     {
-        var scriptPath = Path.Combine(Path.GetTempPath(), "sas-install.sh");
-        using (var http = new HttpClient { Timeout = TimeSpan.FromSeconds(30) })
+        var scriptPath = Path.Combine(Path.GetTempPath(), $"sas-install-{Guid.NewGuid():N}.sh");
+        try
         {
-            var script = await http.GetStringAsync(installerUrl);
-            await File.WriteAllTextAsync(scriptPath, script);
-        }
+            using (var handler = new HttpClientHandler { AllowAutoRedirect = false })
+            using (var http = new HttpClient(handler) { Timeout = TimeSpan.FromSeconds(30) })
+            {
+                var script = await http.GetStringAsync(installerUrl);
+                await File.WriteAllTextAsync(scriptPath, script);
+            }
 
-        var isRoot = string.Equals(Environment.UserName, "root", StringComparison.Ordinal);
-        var psi = isRoot
-            ? new System.Diagnostics.ProcessStartInfo("bash", $"\"{scriptPath}\" --upgrade --yes")
-            : new System.Diagnostics.ProcessStartInfo("sudo", $"bash \"{scriptPath}\" --upgrade --yes");
-        psi.UseShellExecute = false;
-        var process = System.Diagnostics.Process.Start(psi);
-        process?.WaitForExit();
-        if (process != null && process.ExitCode != 0)
+            if (!OperatingSystem.IsWindows())
+            {
+                File.SetUnixFileMode(scriptPath,
+                    UnixFileMode.UserRead | UnixFileMode.UserWrite);
+            }
+
+            var isRoot = string.Equals(Environment.UserName, "root", StringComparison.Ordinal);
+            var psi = isRoot
+                ? new System.Diagnostics.ProcessStartInfo("bash", $"\"{scriptPath}\" --upgrade --yes")
+                : new System.Diagnostics.ProcessStartInfo("sudo", $"bash \"{scriptPath}\" --upgrade --yes");
+            psi.UseShellExecute = false;
+            var process = System.Diagnostics.Process.Start(psi);
+            process?.WaitForExit();
+            if (process != null && process.ExitCode != 0)
+            {
+                Console.WriteLine($"升级脚本退出码: {process.ExitCode}");
+                Console.WriteLine("Please run manually:");
+                Console.WriteLine($"  {command}");
+            }
+        }
+        finally
         {
-            Console.WriteLine($"升级脚本退出码: {process.ExitCode}");
-            Console.WriteLine("Please run manually:");
-            Console.WriteLine($"  {command}");
+            try { File.Delete(scriptPath); } catch { }
         }
     }
     catch (Exception ex)

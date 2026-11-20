@@ -25,9 +25,12 @@ public static class Logger
     private static TextWriter _stderr = Console.Error;
 
     private static Channel<(string Line, TextWriter Writer)> CreateChannel() =>
-        Channel.CreateUnbounded<(string, TextWriter)>(new UnboundedChannelOptions
+        Channel.CreateBounded<(string, TextWriter)>(new BoundedChannelOptions(8192)
         {
-            SingleReader = true
+            SingleReader = true,
+            // Under a flood, keep the most recent lines instead of allowing the
+            // queue to grow without bound.
+            FullMode = BoundedChannelFullMode.DropOldest
         });
 
     private static Task StartConsumer(Channel<(string Line, TextWriter Writer)> channel) =>

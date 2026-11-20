@@ -165,16 +165,60 @@ internal sealed class HttpAuthHandler : IAuthHandler
 
         Logger.Debug("HTTP auth: certificate chain verification passed");
 
-        // Only failures from a caller who proved possession of this callsign's
-        // certificate may affect the per-callsign breaker. Early failures are
-        // not attributable and are covered by the global rate limit instead.
-        ctx.BreakerKey = certCallsign;
+        // Verify the server identity and the proof before attributing any
+        // failure to a callsign. The chain check above only proves that the
+        // certificate package is signed; it does not prove possession of the
+        // user's private key. Everything that depends on the proof must run
+        // before BreakerKey is set, otherwise a replayed public certificate
+        // package can be used to ban an arbitrary callsign.
+        byte[] serverFpBytes;
+        try
+        {
+            serverFpBytes = Base64Url.Decode(serverFpText);
+        }
+        catch
+        {
+            throw Deny(ctx, "invalid server fingerprint");
+        }
+
+        if (string.IsNullOrEmpty(server.CertFingerprint))
+            throw Deny(ctx, "server cert fingerprint not configured");
+
+        byte[] expectedFp;
+        try
+        {
+            expectedFp = Base64Url.Decode(server.CertFingerprint);
+        }
+        catch
+        {
+            throw Deny(ctx, "server cert fingerprint not configured: invalid base64url");
+        }
+
+        if (expectedFp.Length != 32 || !serverFpBytes.AsSpan().SequenceEqual(expectedFp))
+            throw Deny(ctx, "server fingerprint mismatch");
+
+        Logger.Debug($"HTTP auth: verifying proof: serverUid={server.Uid} targetCallsign={server.Callsign} mqttHost={server.MqttHost} mqttPort={server.MqttPort}");
+        var proofOk = HttpProofVerifier.Verify(
+            server.Uid, server.Callsign, server.Uid,
+            server.MqttHost, server.MqttPort, serverFpBytes,
+            payload.Timestamp, user, claimedRole, proofSignature);
+
+        if (!proofOk)
+            throw Deny(ctx, "proof invalid");
 
         if (!string.Equals(username, certCallsign, StringComparison.OrdinalIgnoreCase))
         {
+            // username is not part of the proof TBS, so this failure is not
+            // attributable to the certificate owner. Keep it on the global
+            // rate limit only.
             throw Deny(ctx,
                 $"username mismatch: request={LogSafe.Format(username, CallsignValidator.MaxBytes)} cert={LogSafe.Format(certCallsign, CallsignValidator.MaxBytes)}");
         }
+
+        // The caller has now proved possession of this callsign's private key
+        // and declared the matching username. Only failures from here on may
+        // affect the per-callsign breaker.
+        ctx.BreakerKey = certCallsign;
 
         if (_config.Trust.AllowIssuerSn.Length > 0 &&
             !_config.Trust.AllowIssuerSn.Contains(intermediate.Sn))
@@ -230,44 +274,7 @@ internal sealed class HttpAuthHandler : IAuthHandler
             throw Deny(ctx, $"role mismatch: claimed={LogSafe.Format(claimedRole)} actual={role}");
         }
 
-        byte[] serverFpBytes;
-        try
-        {
-            serverFpBytes = Base64Url.Decode(serverFpText);
-        }
-        catch
-        {
-            throw Deny(ctx, "invalid server fingerprint");
-        }
-
-        if (string.IsNullOrEmpty(server.CertFingerprint))
-            throw Deny(ctx, "server cert fingerprint not configured");
-
-        byte[] expectedFp;
-        try
-        {
-            expectedFp = Base64Url.Decode(server.CertFingerprint);
-        }
-        catch
-        {
-            throw Deny(ctx, "server cert fingerprint not configured: invalid base64url");
-        }
-
-        if (expectedFp.Length != 32 || !serverFpBytes.AsSpan().SequenceEqual(expectedFp))
-            throw Deny(ctx, "server fingerprint mismatch");
-
-        Logger.Debug($"HTTP auth: checking timestamp: payload={payload.Timestamp} server={now} drift={Math.Abs(now - payload.Timestamp)}s");
-
-        Logger.Debug($"HTTP auth: verifying proof: serverUid={server.Uid} targetCallsign={server.Callsign} mqttHost={server.MqttHost} mqttPort={server.MqttPort}");
-        var proofOk = HttpProofVerifier.Verify(
-            server.Uid, server.Callsign, server.Uid,
-            server.MqttHost, server.MqttPort, serverFpBytes,
-            payload.Timestamp, user, claimedRole, proofSignature);
-
-        if (!proofOk)
-            throw Deny(ctx, "proof invalid");
-
-        var isSuperuser = role == "super";
+        var isSuperuser = role.Equals("super", StringComparison.OrdinalIgnoreCase);
 
         if (!_aclStore.HasRole(role))
         {

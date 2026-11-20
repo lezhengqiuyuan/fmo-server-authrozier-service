@@ -1,3 +1,4 @@
+using System.Collections.Concurrent;
 using System.Net;
 using System.Text;
 using System.Text.Encodings.Web;
@@ -17,6 +18,7 @@ sealed class HttpServer
     private readonly IAuthHandler _handler;
     private readonly IResponseTemplate _template;
     private readonly AuthRateLimiter _rateLimiter;
+    private readonly ConcurrentDictionary<Task, byte> _inflight = new();
     private HttpListener? _listener;
 
     public HttpServer(string addr, int port, int maxBodyBytes, int maxPasswordBytes, int maxConcurrent,
@@ -72,7 +74,12 @@ sealed class HttpServer
                 break;
             }
 
-            _ = HandleRequestAsync(ctx);
+            var task = HandleRequestAsync(ctx);
+            if (_inflight.TryAdd(task, 0))
+            {
+                _ = task.ContinueWith(t => _inflight.TryRemove(t, out _),
+                    TaskScheduler.Default);
+            }
         }
     }
 
@@ -199,6 +206,10 @@ sealed class HttpServer
             await ctx.Response.OutputStream.WriteAsync(buffer);
             ctx.Response.OutputStream.Close();
         }
+        catch (Exception ex) when (ex is IOException or OperationCanceledException)
+        {
+            Logger.Debug($"HTTP auth: client disconnected req={requestId}: {ex.Message}");
+        }
         catch (Exception ex)
         {
             Logger.Error($"HTTP auth: request handling error: {ex}");
@@ -214,12 +225,14 @@ sealed class HttpServer
     private async Task<string?> ReadRequestBodyAsync(HttpListenerRequest request)
     {
         var length = request.ContentLength64;
+        if (length <= 0)
+            return null;
         if (length > _maxBodyBytes)
             return null;
 
-        int maxRead = length > 0 ? (int)length : _maxBodyBytes;
+        var maxRead = (int)length;
 
-        using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(10));
+        using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(3));
 
         var buffer = new byte[maxRead];
         var totalRead = 0;
@@ -254,5 +267,27 @@ sealed class HttpServer
     {
         _listener?.Stop();
         _listener?.Close();
+    }
+
+    /// <summary>
+    /// Stops accepting new requests and waits for in-flight handlers before
+    /// the caller flushes archives and logs.
+    /// </summary>
+    public async Task StopAsync(TimeSpan timeout)
+    {
+        Stop();
+
+        var pending = _inflight.Keys.ToArray();
+        if (pending.Length == 0)
+            return;
+
+        try
+        {
+            await Task.WhenAll(pending).WaitAsync(timeout);
+        }
+        catch
+        {
+            // Timed out or a handler faulted; shutdown must still continue.
+        }
     }
 }

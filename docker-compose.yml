@@ -34,6 +34,7 @@ services:
         {mechanism = password_based, backend = http, method = post, url = "http://sas:8080/auth", headers = {"Content-Type" = "application/json"}, body = {username = "$${username}", password = "$${password}"}}
       EMQX_DASHBOARD__DEFAULT_USERNAME: '"${EMQX_DASHBOARD_USERNAME:-admin}"'
       EMQX_DASHBOARD__DEFAULT_PASSWORD: '"${EMQX_DASHBOARD_PASSWORD:?Set EMQX_DASHBOARD_PASSWORD in .env}"'
+      EMQX_AUTHORIZATION__NO_MATCH: deny
     ports:
       - "1883:1883"
       - "18083:18083"

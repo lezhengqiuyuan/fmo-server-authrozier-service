@@ -881,4 +881,33 @@ public sealed class AclStoreTests
         using var reader = new StreamReader(stream!);
         return reader.ReadToEnd();
     }
+
+    [Fact]
+    public void EmptyAllowRole_RefusesToStartByDefault()
+    {
+        using var temp = new TempDirectory("acl-empty-role");
+        var rolesDir = temp.CreateSubdirectory("roles");
+        File.WriteAllText(Path.Combine(rolesDir, "user.json"),
+            """{"role":"user","_version":2,"all":[],"pub":[],"sub":[]}""");
+
+        var ex = Assert.Throws<InvalidOperationException>(() => new AclStore(rolesDir));
+
+        Assert.Contains("user", ex.Message);
+        Assert.Contains("allowEmptyAcl", ex.Message);
+    }
+
+    [Fact]
+    public void EmptyAllowRole_StartsWithExplicitOverride()
+    {
+        using var temp = new TempDirectory("acl-empty-role-allow");
+        var rolesDir = temp.CreateSubdirectory("roles");
+        File.WriteAllText(Path.Combine(rolesDir, "user.json"),
+            """{"role":"user","_version":2,"all":[],"pub":[],"sub":[]}""");
+
+        var store = new AclStore(rolesDir, allowEmptyAcl: true);
+
+        Assert.Empty(store.GetPermissions("user").all);
+        Assert.Empty(store.GetPermissions("user").pub);
+        Assert.Empty(store.GetPermissions("user").sub);
+    }
 }

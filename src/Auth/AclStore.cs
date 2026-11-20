@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using Sas.Logging;
@@ -29,7 +30,7 @@ public sealed class AclStore
         new(StringComparer.OrdinalIgnoreCase);
     private readonly HashSet<string> _overridesWithBuiltin = new(StringComparer.OrdinalIgnoreCase);
 
-    public AclStore(string rolesDir)
+    public AclStore(string rolesDir, bool allowEmptyAcl = false)
     {
         LoadBuiltinTemplates();
         if (_builtinTemplates.Count == 0)
@@ -49,13 +50,46 @@ public sealed class AclStore
             foreach (var template in _builtinTemplates.Values)
                 _roles[template.Acl.Role] = template.Acl;
         }
+
+        ValidateEmptyRoles(allowEmptyAcl);
+    }
+
+    private void ValidateEmptyRoles(bool allowEmptyAcl)
+    {
+        var emptyRoles = _roles.Values
+            .Where(acl => (acl.All?.Length ?? 0) == 0 &&
+                          (acl.Pub?.Length ?? 0) == 0 &&
+                          (acl.Sub?.Length ?? 0) == 0)
+            .Select(acl => acl.Role)
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+
+        if (emptyRoles.Length == 0)
+            return;
+
+        foreach (var role in emptyRoles)
+        {
+            Logger.Error(
+                $"ACL roles: role '{role}' has no allow rules. " +
+                "With EMQX authorization.no_match=allow this grants full access.");
+        }
+
+        if (!allowEmptyAcl)
+        {
+            throw new InvalidOperationException(
+                $"ACL roles with no allow rules: {string.Join(", ", emptyRoles)}. " +
+                "Fix the role file(s) or set acl.allowEmptyAcl=true to accept this explicitly.");
+        }
     }
 
     /// <summary>
     /// Keeps the legacy layout: roles live next to the roots directory ("&lt;parent&gt;/roles").
     /// </summary>
-    public static AclStore FromRootsDir(string rootsDir) =>
-        new(Path.Combine(Path.GetDirectoryName(rootsDir)!, "roles"));
+    public static AclStore FromRootsDir(string rootsDir, bool allowEmptyAcl = false)
+    {
+        var normalized = Path.TrimEndingDirectorySeparator(Path.GetFullPath(rootsDir));
+        return new AclStore(Path.Combine(Path.GetDirectoryName(normalized)!, "roles"), allowEmptyAcl);
+    }
 
     public (string[] all, string[] pub, string[] sub, AclDenyRule[] deny) GetPermissions(string role)
     {
@@ -74,13 +108,13 @@ public sealed class AclStore
 
     public string[] ResolveForUid(string[] topics, long uid)
     {
-        return topics.Select(t => t.Replace("{uid}", uid.ToString())).ToArray();
+        return topics.Select(t => t.Replace("{uid}", uid.ToString(CultureInfo.InvariantCulture))).ToArray();
     }
 
     public AclDenyRule[] ResolveForUid(AclDenyRule[] rules, long uid)
     {
         return rules
-            .Select(r => r with { Topic = r.Topic.Replace("{uid}", uid.ToString()) })
+            .Select(r => r with { Topic = r.Topic.Replace("{uid}", uid.ToString(CultureInfo.InvariantCulture)) })
             .ToArray();
     }
 
@@ -326,8 +360,19 @@ public sealed class AclStore
         }
     }
 
-    private static RoleAcl? ParseRole(string text) =>
-        JsonSerializer.Deserialize<RoleAcl>(text, JsonOptions);
+    private static RoleAcl? ParseRole(string text)
+    {
+        var acl = JsonSerializer.Deserialize<RoleAcl>(text, JsonOptions);
+        if (acl != null)
+        {
+            acl.All ??= [];
+            acl.Pub ??= [];
+            acl.Sub ??= [];
+            acl.Deny ??= [];
+        }
+
+        return acl;
+    }
 
     private sealed record BuiltinTemplate(RoleAcl Acl, string Text, string? Hash);
 

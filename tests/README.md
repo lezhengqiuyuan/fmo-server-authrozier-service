@@ -67,6 +67,9 @@ dotnet tool install dotnet-coverage --tool-path ./.tools
 10. **CA Sn 重复**：CRL 缓存和查询改为以证书 fingerprint 为主键，缓存目录为 `{type}-{safeName}-{fp16}`，并在 `meta.json` 保留原始名字、Sn、完整 fingerprint 和 CRL URL；旧 `crl/{sn}/` 缓存会被忽略。
 11. **CA 名字防护**：CRL 缓存目录名使用 CA `subject.name` 的 ASCII 净化结果（空白、控制字符、路径分隔符和 Windows 保留名都会处理）；日志经 `LogSafe` 转义后保留原始名字，`meta.json` 与归档保留原始值。
 12. **IssuerPubKey 校验**：`CertVerifier` 校验 Intermediate 的 `issuer.publicKey` 与 Root 公钥一致，新增 `IntermediateIssuerKeyMismatch`。
+13. **熔断归因**：`BreakerKey` 只在 proof 验证通过且请求 `username` 与证书呼号一致后设置；proof 失败、`username` 不一致、`serverFingerprint` 不匹配等早期失败不归因，避免重放公开证书包定向封禁。`HttpAuthHandlerTests` 已新增 `Process_ReplayedCertPackageWithInvalidProof_DeniesWithoutBreakerKey`。
+14. **空 ACL**：`AclStore` 默认拒绝 `all` / `pub` / `sub` 全空的角色，只有显式 `acl.allowEmptyAcl=true` 才允许启动。
+15. **关机与入口限流**：SIGTERM/SIGINT 触发优雅关闭并等待在途请求后 flush；全局限流改为滑动窗口，`Content-Length` 缺失直接返回 413，请求体读取超时缩短为 3 秒。
 
 已修复并移除的其他条目：
 

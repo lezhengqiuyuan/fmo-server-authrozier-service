@@ -78,6 +78,7 @@ internal sealed class Config
     public HttpConfig Http { get; set; } = new();
     public UpdateConfig Update { get; set; } = new();
     public ArchiveConfig Archive { get; set; } = new();
+    public AclConfig Acl { get; set; } = new();
 
     public sealed class ServerConfig
     {
@@ -125,6 +126,12 @@ internal sealed class Config
         public int RefreshSec { get; set; } = 14400;
 
         /// <summary>
+        /// Allows plain HTTP CRL URLs. Disabled by default; HTTPS is required
+        /// unless this is explicitly enabled for a legacy deployment.
+        /// </summary>
+        public bool AllowInsecure { get; set; }
+
+        /// <summary>
         /// "soft" keeps the documented fail-soft behaviour; "strict" denies
         /// authentication whenever a required CRL is missing, stale or cannot
         /// be fetched.
@@ -147,6 +154,16 @@ internal sealed class Config
         public int MaxPasswordBytes { get; set; } = 32768;
         public int MaxConcurrent { get; set; } = 128;
         public RateLimitConfig RateLimit { get; set; } = new();
+    }
+
+    public sealed class AclConfig
+    {
+        /// <summary>
+        /// Allows roles whose all/pub/sub lists are empty to start. This is
+        /// dangerous when EMQX runs with authorization.no_match=allow, because
+        /// an empty ACL then grants full access. Defaults to false.
+        /// </summary>
+        public bool AllowEmptyAcl { get; set; }
     }
 
     public sealed class UpdateConfig
@@ -976,6 +993,8 @@ internal sealed class Config
 
     private static void SaveToFile(Config config)
     {
+        // Save atomically and restrict permissions on Unix. A crash while
+        // writing must never leave a truncated config.json behind.
         var dir = Path.GetDirectoryName(ConfigPath);
         if (dir != null && !Directory.Exists(dir))
             Directory.CreateDirectory(dir);
@@ -984,11 +1003,38 @@ internal sealed class Config
         {
             WriteIndented = true
         });
-        File.WriteAllText(ConfigPath, json);
+
+        var tempPath = ConfigPath + ".tmp";
+        File.WriteAllText(tempPath, json);
+
+        if (!OperatingSystem.IsWindows())
+        {
+            try
+            {
+                File.SetUnixFileMode(tempPath,
+                    UnixFileMode.UserRead | UnixFileMode.UserWrite);
+            }
+            catch
+            {
+            }
+        }
+
+        File.Move(tempPath, ConfigPath, overwrite: true);
     }
 
     private static void Validate(Config cfg)
     {
+        cfg.Server ??= new();
+        cfg.Mqtt ??= new();
+        cfg.Trust ??= new();
+        cfg.Crl ??= new();
+        cfg.Log ??= new();
+        cfg.Http ??= new();
+        cfg.Http.RateLimit ??= new();
+        cfg.Update ??= new();
+        cfg.Archive ??= new();
+        cfg.Acl ??= new();
+
         var missing = ConfigParser.FindMissing(cfg);
 
         if (missing.Count > 0)
@@ -1007,6 +1053,39 @@ internal sealed class Config
         if (cfg.Crl.Mode is not ("soft" or "strict"))
         {
             Logger.Error($"crl.mode 必须为 soft 或 strict / crl.mode must be soft or strict: {cfg.Crl.Mode}");
+            Logger.Flush();
+            Environment.Exit(1);
+        }
+
+        var problems = new List<string>();
+
+        if (string.IsNullOrWhiteSpace(cfg.Http.Addr))
+            problems.Add("http.addr must not be empty");
+        if (cfg.Http.Port > 65535)
+            problems.Add($"http.port must be <= 65535 (got {cfg.Http.Port})");
+        if (cfg.Http.TtlSec <= 0)
+            problems.Add($"http.ttlSec must be > 0 (got {cfg.Http.TtlSec})");
+        if (cfg.Http.MaxPasswordBytes > cfg.Http.MaxBodyBytes)
+            problems.Add(
+                $"http.maxPasswordBytes ({cfg.Http.MaxPasswordBytes}) must be <= http.maxBodyBytes ({cfg.Http.MaxBodyBytes})");
+
+        if (cfg.Http.RateLimit is { } rateLimit)
+        {
+            if (rateLimit.GlobalPerMinute < 0)
+                problems.Add($"rateLimit.globalPerMinute must be >= 0 (got {rateLimit.GlobalPerMinute})");
+            if (rateLimit.BreakerFailures < 0)
+                problems.Add($"rateLimit.breakerFailures must be >= 0 (got {rateLimit.BreakerFailures})");
+            if (rateLimit.BreakerWindowSec < 0)
+                problems.Add($"rateLimit.breakerWindowSec must be >= 0 (got {rateLimit.BreakerWindowSec})");
+            if (rateLimit.BreakerBanSec < 0)
+                problems.Add($"rateLimit.breakerBanSec must be >= 0 (got {rateLimit.BreakerBanSec})");
+        }
+
+        if (problems.Count > 0)
+        {
+            Logger.Error("配置无效 / Invalid configuration:");
+            foreach (var problem in problems)
+                Logger.Error($"  {problem}");
             Logger.Flush();
             Environment.Exit(1);
         }

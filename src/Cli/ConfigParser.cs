@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Text;
 
 namespace Sas.Cli;
@@ -74,7 +75,7 @@ internal static class ConfigParser
                     Config.ConfigPath = flatArgs[++i];
                     break;
                 case "--server-uid" when i + 1 < flatArgs.Count:
-                    config.Server.Uid = long.Parse(flatArgs[++i]);
+                    config.Server.Uid = long.Parse(flatArgs[++i], CultureInfo.InvariantCulture);
                     break;
                 case "--server-callsign" when i + 1 < flatArgs.Count:
                     config.Server.Callsign = flatArgs[++i];
@@ -83,7 +84,7 @@ internal static class ConfigParser
                     config.Mqtt.Host = flatArgs[++i];
                     break;
                 case "--mqtt-port" when i + 1 < flatArgs.Count:
-                    config.Mqtt.Port = int.Parse(flatArgs[++i]);
+                    config.Mqtt.Port = int.Parse(flatArgs[++i], CultureInfo.InvariantCulture);
                     break;
                 case "--allow-issuer-sn" when i + 1 < flatArgs.Count:
                     config.Trust.AllowIssuerSn = ParseIssuerSn(flatArgs[++i]);
@@ -92,13 +93,13 @@ internal static class ConfigParser
                     config.Trust.RootsDir = flatArgs[++i];
                     break;
                 case "--issuer-sn" when i + 1 < flatArgs.Count:
-                    config.Server.IssuerSn = long.Parse(flatArgs[++i]);
+                    config.Server.IssuerSn = long.Parse(flatArgs[++i], CultureInfo.InvariantCulture);
                     break;
                 case "--cert-fingerprint" when i + 1 < flatArgs.Count:
                     config.Server.CertFingerprint = flatArgs[++i];
                     break;
                 case "--crl-refresh" when i + 1 < flatArgs.Count:
-                    config.Crl.RefreshSec = int.Parse(flatArgs[++i]);
+                    config.Crl.RefreshSec = int.Parse(flatArgs[++i], CultureInfo.InvariantCulture);
                     break;
                 case "--crl-mode" when i + 1 < flatArgs.Count:
                     config.Crl.Mode = flatArgs[++i];
@@ -107,19 +108,19 @@ internal static class ConfigParser
                     config.Log.Level = flatArgs[++i];
                     break;
                 case "--http-port" when i + 1 < flatArgs.Count:
-                    config.Http.Port = int.Parse(flatArgs[++i]);
+                    config.Http.Port = int.Parse(flatArgs[++i], CultureInfo.InvariantCulture);
                     break;
                 case "--http-addr" when i + 1 < flatArgs.Count:
                     config.Http.Addr = flatArgs[++i];
                     break;
                 case "--http-ttl" when i + 1 < flatArgs.Count:
-                    config.Http.TtlSec = int.Parse(flatArgs[++i]);
+                    config.Http.TtlSec = int.Parse(flatArgs[++i], CultureInfo.InvariantCulture);
                     break;
                 case "--archive-dir" when i + 1 < flatArgs.Count:
                     config.Archive.Dir = flatArgs[++i];
                     break;
                 case "--archive-retention" when i + 1 < flatArgs.Count:
-                    config.Archive.RetentionDays = int.Parse(flatArgs[++i]);
+                    config.Archive.RetentionDays = int.Parse(flatArgs[++i], CultureInfo.InvariantCulture);
                     break;
             }
         }
@@ -136,7 +137,7 @@ internal static class ConfigParser
             switch (flatArgs[i])
             {
                 case "--server-uid" when i + 1 < flatArgs.Count:
-                    config.Server.Uid = long.Parse(flatArgs[++i]);
+                    config.Server.Uid = long.Parse(flatArgs[++i], CultureInfo.InvariantCulture);
                     break;
                 case "--server-callsign" when i + 1 < flatArgs.Count:
                     config.Server.Callsign = flatArgs[++i];
@@ -145,7 +146,7 @@ internal static class ConfigParser
                     config.Mqtt.Host = flatArgs[++i];
                     break;
                 case "--mqtt-port" when i + 1 < flatArgs.Count:
-                    config.Mqtt.Port = int.Parse(flatArgs[++i]);
+                    config.Mqtt.Port = int.Parse(flatArgs[++i], CultureInfo.InvariantCulture);
                     break;
                 case "--allow-issuer-sn" when i + 1 < flatArgs.Count:
                     config.Trust.AllowIssuerSn = ParseIssuerSn(flatArgs[++i]);
@@ -154,13 +155,13 @@ internal static class ConfigParser
                     config.Trust.RootsDir = flatArgs[++i];
                     break;
                 case "--issuer-sn" when i + 1 < flatArgs.Count:
-                    config.Server.IssuerSn = long.Parse(flatArgs[++i]);
+                    config.Server.IssuerSn = long.Parse(flatArgs[++i], CultureInfo.InvariantCulture);
                     break;
                 case "--cert-fingerprint" when i + 1 < flatArgs.Count:
                     config.Server.CertFingerprint = flatArgs[++i];
                     break;
                 case "--crl-refresh" when i + 1 < flatArgs.Count:
-                    config.Crl.RefreshSec = int.Parse(flatArgs[++i]);
+                    config.Crl.RefreshSec = int.Parse(flatArgs[++i], CultureInfo.InvariantCulture);
                     break;
                 case "--crl-mode" when i + 1 < flatArgs.Count:
                     config.Crl.Mode = flatArgs[++i];
@@ -169,19 +170,19 @@ internal static class ConfigParser
                     config.Log.Level = flatArgs[++i];
                     break;
                 case "--http-port" when i + 1 < flatArgs.Count:
-                    config.Http.Port = int.Parse(flatArgs[++i]);
+                    config.Http.Port = int.Parse(flatArgs[++i], CultureInfo.InvariantCulture);
                     break;
                 case "--http-addr" when i + 1 < flatArgs.Count:
                     config.Http.Addr = flatArgs[++i];
                     break;
                 case "--http-ttl" when i + 1 < flatArgs.Count:
-                    config.Http.TtlSec = int.Parse(flatArgs[++i]);
+                    config.Http.TtlSec = int.Parse(flatArgs[++i], CultureInfo.InvariantCulture);
                     break;
                 case "--archive-dir" when i + 1 < flatArgs.Count:
                     config.Archive.Dir = flatArgs[++i];
                     break;
                 case "--archive-retention" when i + 1 < flatArgs.Count:
-                    config.Archive.RetentionDays = int.Parse(flatArgs[++i]);
+                    config.Archive.RetentionDays = int.Parse(flatArgs[++i], CultureInfo.InvariantCulture);
                     break;
             }
         }

@@ -1,5 +1,6 @@
 using System.Collections.Concurrent;
 using System.Net;
+using System.Net.Sockets;
 using System.Text.Encodings.Web;
 using System.Text.Json;
 using Sas.certs;
@@ -33,12 +34,124 @@ public sealed class CrlManager : ICrlPolicy, IDisposable
     private Timer? _timer;
     private int _refreshing;
 
-    public CrlManager(string rootsDir, int refreshSec = 14400, HttpClient? http = null)
+    private readonly bool _allowInsecureHttp;
+
+    public CrlManager(string rootsDir, int refreshSec = 14400, HttpClient? http = null,
+        bool allowInsecureHttp = true)
     {
         _refreshSec = refreshSec;
-        _crlDir = Path.Combine(Path.GetDirectoryName(rootsDir)!, "crl");
-        _http = http ?? new HttpClient { Timeout = TimeSpan.FromSeconds(30) };
+        var normalized = Path.TrimEndingDirectorySeparator(Path.GetFullPath(rootsDir));
+        _crlDir = Path.Combine(Path.GetDirectoryName(normalized)!, "crl");
+        _allowInsecureHttp = allowInsecureHttp;
+        _http = http ?? CreateDefaultHttpClient();
         _ownsHttpClient = http == null;
+    }
+
+    private static HttpClient CreateDefaultHttpClient()
+    {
+        var handler = new HttpClientHandler { AllowAutoRedirect = false };
+        return new HttpClient(handler)
+        {
+            Timeout = TimeSpan.FromSeconds(10),
+            MaxResponseContentBufferSize = 4 * 1024 * 1024
+        };
+    }
+
+    private async Task<bool> IsAllowedCrlUrlAsync(string url)
+    {
+        if (!Uri.TryCreate(url, UriKind.Absolute, out var uri))
+        {
+            Logger.Error($"CRL URL is not absolute: {url}");
+            return false;
+        }
+
+        if (uri.Scheme != Uri.UriSchemeHttps &&
+            !(_allowInsecureHttp && uri.Scheme == Uri.UriSchemeHttp))
+        {
+            Logger.Error($"CRL URL scheme not allowed: {uri.Scheme}");
+            return false;
+        }
+
+        if (string.Equals(uri.Host, "localhost", StringComparison.OrdinalIgnoreCase))
+        {
+            Logger.Error($"CRL URL host not allowed: {uri.Host}");
+            return false;
+        }
+
+        if (IPAddress.TryParse(uri.Host, out var literal))
+        {
+            if (IsPrivateAddress(literal))
+            {
+                Logger.Error($"CRL URL address not allowed: {uri.Host}");
+                return false;
+            }
+
+            return true;
+        }
+
+        // Test/legacy mode skips DNS checks so a fake host can be served by an
+        // injected HttpClient. Production requires HTTPS and resolves every
+        // address to a public one before the request is made.
+        if (_allowInsecureHttp)
+            return true;
+
+        try
+        {
+            var addresses = await Dns.GetHostAddressesAsync(uri.Host);
+            if (addresses.Length == 0)
+            {
+                Logger.Error($"CRL URL host did not resolve: {uri.Host}");
+                return false;
+            }
+
+            foreach (var address in addresses)
+            {
+                if (IsPrivateAddress(address))
+                {
+                    Logger.Error($"CRL URL resolves to a non-public address: {uri.Host} -> {address}");
+                    return false;
+                }
+            }
+
+            return true;
+        }
+        catch (Exception ex)
+        {
+            Logger.Warn($"CRL URL host resolution failed: {uri.Host}: {ex.Message}");
+            return false;
+        }
+    }
+
+    private static bool IsPrivateAddress(IPAddress address)
+    {
+        if (IPAddress.IsLoopback(address))
+            return true;
+
+        if (address.AddressFamily == AddressFamily.InterNetwork)
+        {
+            var b = address.GetAddressBytes();
+            return b[0] == 0 ||
+                   b[0] == 10 ||
+                   (b[0] == 172 && b[1] >= 16 && b[1] <= 31) ||
+                   (b[0] == 192 && b[1] == 168) ||
+                   (b[0] == 169 && b[1] == 254) ||
+                   b[0] >= 224;
+        }
+
+        if (address.AddressFamily == AddressFamily.InterNetworkV6)
+        {
+            if (address.IsIPv6LinkLocal ||
+                address.IsIPv6SiteLocal ||
+                address.IsIPv6Multicast)
+            {
+                return true;
+            }
+
+            var b = address.GetAddressBytes();
+            return (b[0] & 0xFE) == 0xFC; // fc00::/7 unique local
+        }
+
+        return true;
     }
 
     internal static string FingerprintKey(byte[] fingerprint) =>
@@ -306,6 +419,13 @@ public sealed class CrlManager : ICrlPolicy, IDisposable
 
         try
         {
+            if (!await IsAllowedCrlUrlAsync(root.Crl))
+            {
+                if (!_rootCrls.ContainsKey(key))
+                    SetRootState(root, CrlAvailability.FetchFailed);
+                return;
+            }
+
             var json = await _http.GetStringAsync(root.Crl);
             var doc = JsonDocument.Parse(json).RootElement;
 
@@ -375,6 +495,13 @@ public sealed class CrlManager : ICrlPolicy, IDisposable
 
         try
         {
+            if (!await IsAllowedCrlUrlAsync(issuer.Crl))
+            {
+                if (!_intermediateCrls.ContainsKey(key))
+                    SetIntermediateState(issuer, CrlAvailability.FetchFailed);
+                return;
+            }
+
             var json = await _http.GetStringAsync(issuer.Crl);
             var doc = JsonDocument.Parse(json).RootElement;
 

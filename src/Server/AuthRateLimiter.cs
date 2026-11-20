@@ -28,9 +28,8 @@ public sealed class AuthRateLimiter
     private readonly TimeProvider _time;
     private readonly object _globalLock = new();
     private readonly ConcurrentDictionary<string, BreakerState> _states = new(StringComparer.Ordinal);
+    private readonly Queue<long> _globalRequests = new();
 
-    private long _globalWindowStart;
-    private int _globalCount;
     private long _lastGlobalLog;
 
     private sealed class BreakerState
@@ -58,15 +57,13 @@ public sealed class AuthRateLimiter
 
         lock (_globalLock)
         {
-            if (now - _globalWindowStart >= OneMinuteMs)
-            {
-                _globalWindowStart = now;
-                _globalCount = 0;
-            }
+            var cutoff = now - OneMinuteMs;
+            while (_globalRequests.Count > 0 && _globalRequests.Peek() <= cutoff)
+                _globalRequests.Dequeue();
 
-            if (_globalCount < _config.GlobalPerMinute)
+            if (_globalRequests.Count < _config.GlobalPerMinute)
             {
-                _globalCount++;
+                _globalRequests.Enqueue(now);
                 return true;
             }
 

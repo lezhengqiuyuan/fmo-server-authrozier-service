@@ -18,7 +18,7 @@
 
   <ItemGroup>
     <PackageReference Include="Chaos.NaCl.Standard" Version="1.0.0" />
-    <PackageReference Include="System.Formats.Cbor" Version="10.0.9" />
+    <PackageReference Include="System.Formats.Cbor" Version="10.0.15" />
   </ItemGroup>
 
   <ItemGroup>

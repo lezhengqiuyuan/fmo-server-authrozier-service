@@ -63,7 +63,9 @@ public static class HttpProofVerifier
 
     public static bool IsTimestampValid(long timestamp, long nowUtc)
     {
-        return Math.Abs(nowUtc - timestamp) <= MaxTimestampDriftSec;
+        // Range comparison avoids Math.Abs overflow for long.MinValue.
+        return timestamp >= nowUtc - MaxTimestampDriftSec
+               && timestamp <= nowUtc + MaxTimestampDriftSec;
     }
 
     internal static byte[] BuildTbs(
