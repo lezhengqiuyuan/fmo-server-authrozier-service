@@ -26,7 +26,11 @@ public sealed class EmqxResponseTemplate : IResponseTemplate
             ClientAttrs = new EmqxClientAttrs
             {
                 Callsign = result.Callsign,
-                Uid = result.Uid.ToString()
+                Uid = result.Uid.ToString(),
+                RootFingerprint = result.RootFingerprint,
+                IssuerFingerprint = result.IssuerFingerprint,
+                UserFingerprint = result.UserFingerprint,
+                CaContactEmail = result.CaContactEmail
             },
             ExpireAt = result.ExpireAt,
             Acl = acl
@@ -63,6 +67,22 @@ public sealed class EmqxResponseTemplate : IResponseTemplate
 
         [JsonPropertyName("uid")]
         public string Uid { get; init; } = "";
+
+        [JsonPropertyName("fmo_root_fingerprint")]
+        [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+        public string? RootFingerprint { get; init; }
+
+        [JsonPropertyName("fmo_issuer_fingerprint")]
+        [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+        public string? IssuerFingerprint { get; init; }
+
+        [JsonPropertyName("fmo_user_fingerprint")]
+        [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+        public string? UserFingerprint { get; init; }
+
+        [JsonPropertyName("fmo_ca_contact_email")]
+        [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+        public string? CaContactEmail { get; init; }
     }
 
     private sealed class EmqxAclEntry
