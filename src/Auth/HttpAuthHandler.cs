@@ -306,6 +306,7 @@ internal sealed class HttpAuthHandler : IAuthHandler
             Callsign = certCallsign,
             Uid = user.Uid,
             RootFingerprint = Base64Url.Encode(rootFp),
+            IssuerFingerprint = Base64Url.Encode(issuerFp),
             UserFingerprint = Base64Url.Encode(userFp),
             CaContactEmail = UsableMailbox(root.IssuerEmail) ?? UsableMailbox(intermediate.SubjectEmail),
             Role = role,

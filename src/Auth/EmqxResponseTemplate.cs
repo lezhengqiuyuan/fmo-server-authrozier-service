@@ -28,6 +28,7 @@ public sealed class EmqxResponseTemplate : IResponseTemplate
                 Callsign = result.Callsign,
                 Uid = result.Uid.ToString(),
                 RootFingerprint = result.RootFingerprint,
+                IssuerFingerprint = result.IssuerFingerprint,
                 UserFingerprint = result.UserFingerprint,
                 CaContactEmail = result.CaContactEmail
             },
@@ -70,6 +71,10 @@ public sealed class EmqxResponseTemplate : IResponseTemplate
         [JsonPropertyName("fmo_root_fingerprint")]
         [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
         public string? RootFingerprint { get; init; }
+
+        [JsonPropertyName("fmo_issuer_fingerprint")]
+        [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+        public string? IssuerFingerprint { get; init; }
 
         [JsonPropertyName("fmo_user_fingerprint")]
         [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]

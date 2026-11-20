@@ -44,7 +44,7 @@ public sealed class HttpServerIntegrationTests
     }
 
     [Fact]
-    public async Task Post_ValidCredentials_ReturnsVerifiedRootAndUserFingerprints()
+    public async Task Post_ValidCredentials_ReturnsVerifiedRootIssuerAndUserFingerprints()
     {
         using var env = new AuthTestEnvironment();
         // Use a distinct client certificate so a response using the target
@@ -63,6 +63,8 @@ public sealed class HttpServerIntegrationTests
         var attrs = json.GetProperty("client_attrs");
         Assert.True(attrs.TryGetProperty("fmo_root_fingerprint", out var root), "Root fingerprint is missing");
         Assert.Equal(System.Buffers.Text.Base64Url.EncodeToString(env.Pki.Root.Fingerprint()), root.GetString());
+        Assert.True(attrs.TryGetProperty("fmo_issuer_fingerprint", out var issuer), "Issuer fingerprint is missing");
+        Assert.Equal(System.Buffers.Text.Base64Url.EncodeToString(clientPki.Intermediate.Fingerprint()), issuer.GetString());
         Assert.True(attrs.TryGetProperty("fmo_user_fingerprint", out var user), "User fingerprint is missing");
         Assert.Equal(System.Buffers.Text.Base64Url.EncodeToString(clientPki.User.Fingerprint()), user.GetString());
     }
