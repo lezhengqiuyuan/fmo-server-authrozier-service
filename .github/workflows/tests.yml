@@ -87,25 +87,30 @@ jobs:
           # CLI interaction code (interactive wizard, admin/cluster prompts and
           # the program entry point) is validated manually; the gate measures
           # the protocol, trust, auth, logging and server layers.
-          EXCLUDED_PREFIXES = ("Program", "Sas.Config")
+          EXCLUDED_PREFIXES = ("Program", "Sas.Program", "Sas.Config", "Sas.Tests")
 
           root = ET.parse("coverage.xml").getroot()
+          packages = [p.get("name", "") for p in root.iter("package")]
+          print("coverage packages: " + ", ".join(packages))
+
           covered = 0
           valid = 0
 
-          for package in root.iter("package"):
-              if package.get("name") != "sas":
+          for cls in root.iter("class"):
+              name = cls.get("name", "")
+              if not name.startswith("Sas."):
                   continue
-              for cls in package.iter("class"):
-                  name = cls.get("name", "")
-                  if name.startswith(EXCLUDED_PREFIXES):
-                      continue
-                  for line in cls.iter("line"):
-                      valid += 1
-                      if int(line.get("hits", "0")) > 0:
-                          covered += 1
+              if name.startswith(EXCLUDED_PREFIXES):
+                  continue
+              for line in cls.iter("line"):
+                  valid += 1
+                  if int(line.get("hits", "0")) > 0:
+                      covered += 1
 
-          rate = covered / valid if valid else 0.0
+          if valid == 0:
+              sys.exit("coverage gate failed: no Sas.* classes found in coverage.xml")
+
+          rate = covered / valid
           print(f"core line coverage: {covered}/{valid} = {rate:.1%}")
 
           if rate < 0.75:
