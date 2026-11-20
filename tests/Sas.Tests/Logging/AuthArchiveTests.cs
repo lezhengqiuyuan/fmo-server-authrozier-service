@@ -122,16 +122,20 @@ public sealed class AuthArchiveTests
     }
 
     [Fact]
-    public void OversizedRecord_IsStoredAsSummary()
+    public void OversizedRecord_DropsPasswordAndPayload()
     {
         using var temp = new TempDirectory("archive-record-limit");
         var dir = temp.Combine("archive");
         var clock = new FixedTimeProvider(BaseTime);
-        var archive = new AuthArchive(CreateConfig(dir, c => c.MaxRecordBytes = 200), clock);
+        var archive = new AuthArchive(CreateConfig(dir, c => c.MaxRecordBytes = 800), clock);
 
         var longPassword = new string('p', 500);
         archive.Write(CreateRecord(result: "deny", password: longPassword));
         archive.Flush();
+
+        var file = ArchiveFile(dir, "BG6VMZ", clock);
+        var line = Assert.Single(File.ReadAllLines(file));
+        Assert.True(Encoding.UTF8.GetByteCount(line) <= 800);
 
         var record = Assert.Single(ArchiveProbe.ReadRecords(dir));
         Assert.Null(record.Password);
@@ -171,6 +175,35 @@ public sealed class AuthArchiveTests
         Assert.Equal("BG6VMZ", stored.Callsign);
         Assert.Equal("deny", stored.Result);
         Assert.Equal(500, stored.PasswordLength);
+    }
+
+    [Fact]
+    public void OversizedCore_IsHardTruncatedToLimit()
+    {
+        using var temp = new TempDirectory("archive-core-limit");
+        var dir = temp.Combine("archive");
+        var clock = new FixedTimeProvider(BaseTime);
+        var archive = new AuthArchive(
+            CreateConfig(dir, c => c.MaxRecordBytes = 200),
+            clock);
+
+        var record = CreateRecord(result: "deny", password: null) with
+        {
+            Reason = new string('r', 5000)
+        };
+
+        archive.Write(record);
+        archive.Flush();
+
+        var file = ArchiveFile(dir, "BG6VMZ", clock);
+        var line = Assert.Single(File.ReadAllLines(file));
+
+        Assert.True(Encoding.UTF8.GetByteCount(line) <= 200,
+            $"archive line is {Encoding.UTF8.GetByteCount(line)} bytes");
+
+        using var doc = JsonDocument.Parse(line);
+        Assert.Equal("BG6VMZ", doc.RootElement.GetProperty("callsign").GetString());
+        Assert.Equal("deny", doc.RootElement.GetProperty("result").GetString());
     }
 
     [Fact]

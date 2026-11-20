@@ -37,11 +37,11 @@ public sealed class CertVerifierTests
     }
 
     [Fact]
-    public void VerifyFullChain_IntermediateWithNonZeroPathLen_ReturnsIntermediateSignFail()
+    public void VerifyFullChain_IntermediateWithNonZeroPathLen_ReturnsIntermediatePathLenInvalid()
     {
         var pki = TestPki.Create(new TestPkiOptions { PathLen = 1 });
 
-        Assert.Equal(VerifyResult.IntermediateSignFail,
+        Assert.Equal(VerifyResult.IntermediatePathLenInvalid,
             _verifier.VerifyFullChain(pki.Root, pki.Intermediate, pki.User, Now));
     }
 

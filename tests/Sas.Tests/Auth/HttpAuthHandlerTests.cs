@@ -497,7 +497,7 @@ public sealed class HttpAuthHandlerTests
     }
 
     [Fact]
-    public void Process_IntermediateWithNonZeroPathLen_DeniesWithSignatureError()
+    public void Process_IntermediateWithNonZeroPathLen_DeniesWithPathLenError()
     {
         // pathLen participates in the signature array, so a CA that signed
         // pathLen=1 verifies correctly and is then rejected by the policy check.
@@ -505,7 +505,7 @@ public sealed class HttpAuthHandlerTests
 
         var ex = Deny(env);
 
-        Assert.Contains("chain invalid: intermediate CA signature invalid", ex.Message);
+        Assert.Contains("chain invalid: intermediate CA pathLen must be 0", ex.Message);
     }
 
     [Fact]

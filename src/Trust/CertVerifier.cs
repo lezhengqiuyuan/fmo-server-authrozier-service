@@ -20,7 +20,8 @@ public enum VerifyResult
     RootPathLenInvalid = -12,
     IntermediateIssuerMismatch = -13,
     UserIssuerMismatch = -14,
-    IntermediateIssuerKeyMismatch = -15
+    IntermediateIssuerKeyMismatch = -15,
+    IntermediatePathLenInvalid = -16
 }
 
 public sealed class CertVerifier
@@ -62,7 +63,7 @@ public sealed class CertVerifier
         if (intermediate.PathLen != 0)
         {
             Logger.Debug($"  step: intermediate pathLen invalid ({intermediate.PathLen} != 0)");
-            return VerifyResult.IntermediateSignFail;
+            return VerifyResult.IntermediatePathLenInvalid;
         }
         Logger.Debug("  step: intermediate pathLen PASSED");
 
@@ -103,7 +104,8 @@ public sealed class CertVerifier
 
         if (!intermediate.CanIssueFor(user.Uid))
         {
-            Logger.Debug($"  step: UID range FAILED ({user.Uid} not in [0,0])");
+            Logger.Debug($"  step: UID range FAILED ({user.Uid} not in " +
+                         $"[{intermediate.UidRangeStart},{intermediate.UidRangeEnd}])");
             return VerifyResult.UidOutOfRange;
         }
         Logger.Debug($"  step: UID range PASSED ({user.Uid})");
@@ -143,6 +145,7 @@ public sealed class CertVerifier
         VerifyResult.IntermediateIssuerMismatch => "intermediate CA issuer mismatch",
         VerifyResult.UserIssuerMismatch => "user certificate issuer mismatch",
         VerifyResult.IntermediateIssuerKeyMismatch => "intermediate CA issuer public key mismatch",
+        VerifyResult.IntermediatePathLenInvalid => "intermediate CA pathLen must be 0",
         _ => "unknown error"
     };
 }

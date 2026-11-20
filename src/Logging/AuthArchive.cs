@@ -243,6 +243,27 @@ public sealed class AuthArchive : IArchiveSink
             PayloadSha256 = minimal.PayloadSha256
         };
         line = JsonSerializer.Serialize(core, JsonOptions);
+
+        if (ExceedsRecordLimit(line))
+        {
+            core = core with { Reason = null };
+            line = JsonSerializer.Serialize(core, JsonOptions);
+        }
+
+        if (ExceedsRecordLimit(line))
+        {
+            // Last resort: keep only the correlation fields. Config validation
+            // enforces a 200-byte minimum so this always fits.
+            line = JsonSerializer.Serialize(new
+            {
+                v = core.V,
+                ts = core.Ts,
+                requestId = core.RequestId,
+                callsign = core.Callsign,
+                result = core.Result
+            }, JsonOptions);
+        }
+
         LogTruncation("core");
         return line;
     }

@@ -1071,6 +1071,10 @@ internal sealed class Config
             problems.Add(
                 $"http.maxPasswordBytes ({cfg.Http.MaxPasswordBytes}) must be <= http.maxBodyBytes ({cfg.Http.MaxBodyBytes})");
 
+        if (cfg.Archive.MaxRecordBytes > 0 && cfg.Archive.MaxRecordBytes < 200)
+            problems.Add(
+                $"archive.maxRecordBytes must be 0 (unlimited) or >= 200 (got {cfg.Archive.MaxRecordBytes})");
+
         if (cfg.Http.RateLimit is { } rateLimit)
         {
             if (rateLimit.GlobalPerMinute < 0)
