@@ -260,13 +260,14 @@ internal sealed class HttpAuthHandler : IAuthHandler
             throw Deny(ctx, $"intermediate revoked: {LogSafe.Format(intReason, 128)}");
         }
 
+        var userFp = user.Fingerprint();
         if (_crlManager.IsUserRevoked(
-                issuerFp, user.Uid, user.Fingerprint(), out var userReason))
+                issuerFp, user.Uid, userFp, out var userReason))
         {
             throw Deny(ctx, $"user revoked: {LogSafe.Format(userReason, 128)}");
         }
 
-        var role = DetermineRole(user, server);
+        var role = DetermineRole(user, userFp, server);
         ctx.Role = role;
         if (!string.IsNullOrEmpty(claimedRole) &&
             !string.Equals(claimedRole, role, StringComparison.OrdinalIgnoreCase))
@@ -304,6 +305,9 @@ internal sealed class HttpAuthHandler : IAuthHandler
         {
             Callsign = certCallsign,
             Uid = user.Uid,
+            RootFingerprint = Base64Url.Encode(rootFp),
+            UserFingerprint = Base64Url.Encode(userFp),
+            CaContactEmail = UsableMailbox(root.IssuerEmail) ?? UsableMailbox(intermediate.SubjectEmail),
             Role = role,
             IsSuperuser = isSuperuser,
             IssuedAt = now,
@@ -351,12 +355,16 @@ internal sealed class HttpAuthHandler : IAuthHandler
     private static string Sn(long? value) =>
         value?.ToString(CultureInfo.InvariantCulture) ?? "?";
 
+    private static string? UsableMailbox(string email) =>
+        !string.IsNullOrWhiteSpace(email) && !email.Any(char.IsControl) &&
+        System.Net.Mail.MailAddress.TryCreate(email, out var address) && address.Address == email
+            ? email
+            : null;
+
     private int _serverFpMismatchLogged;
 
-    private string DetermineRole(UserCert user, ServerIdentity server)
+    private string DetermineRole(UserCert user, byte[] userFp, ServerIdentity server)
     {
-        var userFp = user.Fingerprint();
-
         // The server's own certificate: both UID and fingerprint must match, so
         // a different key reusing the same UID can never self-promote. Use the
         // matched identity's fingerprint so cluster nodes work the same way.

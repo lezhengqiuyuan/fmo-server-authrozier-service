@@ -20,6 +20,8 @@ public sealed record TestPkiOptions
     public string UserCallsign { get; init; } = "BG6VMZ";
     public string RootName { get; init; } = "bg5esn";
     public string IssuerName { get; init; } = "bd4wpw";
+    public string RootEmail { get; init; } = "root@example.test";
+    public string IntermediateEmail { get; init; } = "issuer@example.test";
     public long Iat { get; init; } = 1_600_000_000;
     public long RootExp { get; init; } = 1_900_000_000;
     public long IssuerExp { get; init; } = 1_900_000_000;
@@ -97,7 +99,7 @@ public sealed class TestPki
         {
             Sn = o.RootSn,
             IssuerName = o.RootName,
-            IssuerEmail = "root@example.test",
+            IssuerEmail = o.RootEmail,
             SubjectName = o.RootName,
             SubjectPubKey = publicKey,
             PathLen = o.RootPathLen,
@@ -113,7 +115,7 @@ public sealed class TestPki
         {
             Sn = o.RootSn,
             IssuerName = o.RootName,
-            IssuerEmail = "root@example.test",
+            IssuerEmail = o.RootEmail,
             SubjectName = o.RootName,
             SubjectPubKey = publicKey,
             PathLen = o.RootPathLen,
@@ -144,7 +146,7 @@ public sealed class TestPki
             IssuerName = root.SubjectName,
             IssuerPubKey = intermediateIssuerPubKey,
             SubjectName = o.IssuerName,
-            SubjectEmail = "issuer@example.test",
+            SubjectEmail = o.IntermediateEmail,
             SubjectPubKey = interKeys.Public,
             PathLen = o.PathLen,
             KeyId = "intermediate-key",
@@ -164,7 +166,7 @@ public sealed class TestPki
             IssuerName = root.SubjectName,
             IssuerPubKey = intermediateIssuerPubKey,
             SubjectName = o.IssuerName,
-            SubjectEmail = "issuer@example.test",
+            SubjectEmail = o.IntermediateEmail,
             SubjectPubKey = interKeys.Public,
             PathLen = o.PathLen,
             KeyId = "intermediate-key",

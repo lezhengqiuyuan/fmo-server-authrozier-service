@@ -240,6 +240,10 @@ Headers: { "content-type": "application/json" }
 Body: { "username": "${username}", "password": "${password}" }
 ```
 
+认证成功时，响应的 `client_attrs` 除了 `callsign` 和 `uid`，还包含 `fmo_root_fingerprint`（匹配并通过验证的信任根证书）与 `fmo_user_fingerprint`（已验证的登录用户证书，不是目标服务器证书）。两个指纹均为证书待签名 CBOR 的 SHA-256，以无填充 Base64URL 编码。审计规则可选取这些属性进行证书归属判断；认证拒绝时不返回这些属性。
+
+若证书链提供有效的单一邮箱，成功响应还包含 `fmo_ca_contact_email`：优先采用已验证根的 `issuer.email`，其次采用已验证中间证书的 `subject.email`，均不可用则省略。是否发送通知由审计服务自行决定。
+
 ---
 
 ## 配置参考
