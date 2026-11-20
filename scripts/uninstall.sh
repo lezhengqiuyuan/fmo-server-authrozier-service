@@ -58,15 +58,11 @@ if [ "$OS" = "Linux" ]; then
     info "[3/4] 删除程序和配置..."
     rm -rf "$INSTALL_DIR"
     rm -rf "$CONFIG_DIR"
-    ok "      完成"
+    ok "      已删除程序: $INSTALL_DIR"
+    ok "      已删除配置: $CONFIG_DIR"
 
-    info "[4/4] 数据目录..."
-    if [ -d "$DATA_DIR" ]; then
-        warn "      已保留数据目录: $DATA_DIR"
-        warn "      如需彻底删除: rm -rf $DATA_DIR"
-    else
-        ok "      无数据目录"
-    fi
+    info "[4/4] 检查数据目录..."
+    ok "      见下方未删除内容"
 
 elif [ "$OS" = "Darwin" ]; then
     info "[1/4] 停止服务..."
@@ -83,19 +79,31 @@ elif [ "$OS" = "Darwin" ]; then
     rm -f /var/log/fmo-sas.log /var/log/fmo-sas.err
     ok "      完成"
 
-    info "[4/4] 数据目录..."
-    if [ -d "$DATA_DIR" ]; then
-        warn "      已保留数据目录: $DATA_DIR"
-        warn "      如需彻底删除: rm -rf $DATA_DIR"
-    else
-        ok "      无数据目录"
-    fi
+    info "[4/4] 检查数据目录..."
+    ok "      见下方未删除内容"
 fi
 
 echo ""
-ok "═══ FMO SAS 已完全卸载 ═══"
+ok "═══ FMO SAS 已卸载 ═══"
+echo ""
+info "以下内容未删除："
+
 if [ -d "$DATA_DIR" ]; then
-    warn "数据目录已保留: $DATA_DIR"
-    warn "如需彻底删除: rm -rf $DATA_DIR"
+    warn "  数据目录: $DATA_DIR"
+    warn "    含 roots/roles/crl/archive"
+    warn "  彻底删除: rm -rf $DATA_DIR"
+else
+    ok "  数据目录: 无"
 fi
+
+if [ "$OS" = "Linux" ] && [ -d /etc/systemd/system/fmo-sas.service.d ]; then
+    warn "  systemd 覆盖配置: /etc/systemd/system/fmo-sas.service.d"
+    warn "  彻底删除: rm -rf /etc/systemd/system/fmo-sas.service.d"
+fi
+
+if [ "$OS" = "Linux" ]; then
+    warn "  系统日志: journalctl -u fmo-sas"
+    warn "    日志由 journald 管理，通常无需手动删除"
+fi
+
 echo ""
