@@ -354,7 +354,7 @@ Body: { "username": "${username}", "password": "${password}" }
 
 - `username` 最长 32 个 UTF-8 字节，只允许 `A-Z 0-9 / -`，非法请求直接拒绝且不归档；
 - 默认全局限流 600 次/分钟；
-- 同一呼号在证书链校验通过后，5 分钟内失败 20 次会临时封禁 10 分钟；无法证明持有该呼号证书的早期失败只受全局限流约束，避免伪造呼号影响正常用户；
+- 同一呼号只有在 proof 验证通过且请求 username 与证书呼号一致后，5 分钟内失败 20 次才会临时封禁 10 分钟；proof 失败、username 不一致、指纹不匹配等早期失败不归因，只受全局限流约束，避免重放公开证书包影响正常用户；
 - `http.maxPasswordBytes` 限制 password 的 UTF-8 字节数，超长直接拒绝；
 - 外部字段写入日志前统一转义，避免换行/控制字符注入。
 
@@ -643,7 +643,7 @@ Intermediate 证书只会在登录报文中出现，`CrlManager` 启动时无法
 4. **升级**：使用官方安装脚本覆盖升级，配置文件和数据目录保持不变（或关闭自动检查：`update.enabled = false`）。
 5. **设备侧**：FMO 设备固件需使用 SAS HTTP 认证器模式（MQTT CONNECT 时 username/password 携带证书信息）。
 6. **登录归档**：成功登录保存完整报文，失败登录默认只保存摘要。归档文件包含完整证书链和 proof 签名（不含私钥），仅用于审计和故障排查。应限制归档目录访问权限，并按需调整 `archive.retentionDays`、`archive.maxFileBytes` 与 `archive.maxRecordBytes`。
-7. **入口防护**：`username` 最长 32 个 UTF-8 字节且只允许呼号字符；全局限流默认 600 次/分钟。同一呼号只有在证书链校验通过后连续失败才会临时熔断，早期失败不会因伪造呼号影响其他用户。阈值可在 `http.rateLimit` 中调整。
+7. **入口防护**：`username` 最长 32 个 UTF-8 字节且只允许呼号字符；全局限流默认 600 次/分钟。同一呼号只有在 proof 验证通过且请求 username 与证书呼号一致后连续失败才会临时熔断；proof 失败、username 不一致、指纹不匹配等早期失败不归因，避免重放公开证书包影响其他用户。阈值可在 `http.rateLimit` 中调整。
 
 ---
 

@@ -232,6 +232,7 @@ prepare_package() {
 
     if [ -z "$DOWNLOAD_SHA256" ]; then
         err "升级清单缺少 ${RID}_sha256，拒绝下载未校验的安装包"
+        err "示例: \"${RID}_sha256\": \"<64 位 hex>\""
         return 1
     fi
 

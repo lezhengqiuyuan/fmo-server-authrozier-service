@@ -41,6 +41,9 @@ jobs:
         run: |
           $output = dotnet list src/Sas.csproj package --vulnerable --include-transitive 2>&1 | Out-String
           Write-Host $output
+          if ($LASTEXITCODE -ne 0) {
+              throw 'Dependency audit command failed'
+          }
           if ($output -match 'following vulnerable packages') {
               throw 'Vulnerable dependencies detected'
           }

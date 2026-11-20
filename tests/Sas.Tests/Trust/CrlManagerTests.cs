@@ -1,3 +1,4 @@
+using System.Net;
 using System.Text.Json;
 using Sas.Tests.Fixtures;
 using Sas.Trust;
@@ -646,5 +647,24 @@ public sealed class CrlManagerTests
             TimeSpan.FromSeconds(3)));
         Assert.True(File.Exists(Path.Combine(
             TestCrl.IntermediateCacheDirectory(temp, pki.Intermediate), "intermediate.json")));
+    }
+
+    [Theory]
+    [InlineData("::ffff:10.0.0.1")]
+    [InlineData("::ffff:127.0.0.1")]
+    [InlineData("::ffff:192.168.1.1")]
+    [InlineData("::ffff:169.254.1.1")]
+    [InlineData("::ffff:224.0.0.1")]
+    public void IsPrivateAddress_RejectsIpv4MappedPrivateAddresses(string value)
+    {
+        Assert.True(CrlManager.IsPrivateAddress(IPAddress.Parse(value)));
+    }
+
+    [Theory]
+    [InlineData("::ffff:8.8.8.8")]
+    [InlineData("::ffff:1.1.1.1")]
+    public void IsPrivateAddress_AllowsIpv4MappedPublicAddresses(string value)
+    {
+        Assert.False(CrlManager.IsPrivateAddress(IPAddress.Parse(value)));
     }
 }

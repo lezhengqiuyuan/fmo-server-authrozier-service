@@ -362,7 +362,11 @@ static async Task CheckUpdateCommand(bool autoYes)
             using (var handler = new HttpClientHandler { AllowAutoRedirect = false })
             using (var http = new HttpClient(handler) { Timeout = TimeSpan.FromSeconds(30) })
             {
-                var script = await http.GetStringAsync(installerUrl);
+                using var response = await http.GetAsync(installerUrl);
+                response.EnsureSuccessStatusCode();
+                var script = await response.Content.ReadAsStringAsync();
+                if (!script.StartsWith("#!", StringComparison.Ordinal))
+                    throw new InvalidDataException("upgrade script does not look like a shell script");
                 await File.WriteAllTextAsync(scriptPath, script);
             }
 

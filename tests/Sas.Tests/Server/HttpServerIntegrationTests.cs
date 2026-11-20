@@ -1,4 +1,5 @@
 using System.Net;
+using System.Net.Sockets;
 using System.Text;
 using System.Text.Json;
 using Sas.Auth;
@@ -247,5 +248,33 @@ public sealed class HttpServerIntegrationTests
 
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
         Assert.Equal("deny", (await ReadJson(response)).GetProperty("result").GetString());
+    }
+
+    [Fact]
+    public async Task ChunkedBody_IsAcceptedAndDenied()
+    {
+        using var env = new AuthTestEnvironment();
+        await using var server = new HttpServerHarness(env.Handler, new EmqxResponseTemplate(), UnlimitedLimiter());
+
+        using var tcp = new TcpClient();
+        await tcp.ConnectAsync(IPAddress.Loopback, server.Port);
+        await using var stream = tcp.GetStream();
+
+        var request =
+            "POST /auth HTTP/1.1\r\n" +
+            "Host: 127.0.0.1\r\n" +
+            "Transfer-Encoding: chunked\r\n" +
+            "Content-Type: application/json\r\n" +
+            "Connection: close\r\n" +
+            "\r\n" +
+            "2\r\n{}\r\n" +
+            "0\r\n\r\n";
+        await stream.WriteAsync(Encoding.ASCII.GetBytes(request));
+
+        using var reader = new StreamReader(stream, Encoding.UTF8);
+        var response = await reader.ReadToEndAsync();
+
+        Assert.Contains("200", response.Split('\r')[0]);
+        Assert.Contains("\"result\":\"deny\"", response);
     }
 }

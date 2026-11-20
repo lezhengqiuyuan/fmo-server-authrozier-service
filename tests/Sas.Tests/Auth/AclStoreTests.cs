@@ -910,4 +910,19 @@ public sealed class AclStoreTests
         Assert.Empty(store.GetPermissions("user").pub);
         Assert.Empty(store.GetPermissions("user").sub);
     }
+
+    [Fact]
+    public void FromRootsDir_NormalizesTrailingSeparator()
+    {
+        using var temp = new TempDirectory("acl-path-normalize");
+        var rootsA = temp.CreateSubdirectory("a", "roots");
+        var rootsB = temp.CreateSubdirectory("b", "roots");
+
+        _ = AclStore.FromRootsDir(rootsA);
+        _ = AclStore.FromRootsDir(rootsB + Path.DirectorySeparatorChar);
+
+        Assert.True(Directory.Exists(Path.Combine(Path.GetDirectoryName(rootsA)!, "roles")));
+        Assert.True(Directory.Exists(Path.Combine(Path.GetDirectoryName(rootsB)!, "roles")));
+        Assert.False(Directory.Exists(Path.Combine(rootsB, "roles")));
+    }
 }

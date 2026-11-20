@@ -122,8 +122,11 @@ public sealed class CrlManager : ICrlPolicy, IDisposable
         }
     }
 
-    private static bool IsPrivateAddress(IPAddress address)
+    internal static bool IsPrivateAddress(IPAddress address)
     {
+        if (address.IsIPv4MappedToIPv6)
+            return IsPrivateAddress(address.MapToIPv4());
+
         if (IPAddress.IsLoopback(address))
             return true;
 

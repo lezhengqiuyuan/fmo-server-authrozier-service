@@ -225,12 +225,13 @@ sealed class HttpServer
     private async Task<string?> ReadRequestBodyAsync(HttpListenerRequest request)
     {
         var length = request.ContentLength64;
-        if (length <= 0)
-            return null;
         if (length > _maxBodyBytes)
             return null;
 
-        var maxRead = (int)length;
+        // Accept chunked/unknown-length requests: EMQX normally sends
+        // Content-Length, but a reverse proxy may not. The 3-second total
+        // timeout plus the concurrency limit bound the slow-request cost.
+        var maxRead = length > 0 ? (int)length : _maxBodyBytes;
 
         using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(3));
 

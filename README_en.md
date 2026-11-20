@@ -342,7 +342,7 @@ Entry-point protections:
 
 - `username` is limited to 32 UTF-8 bytes and only `A-Z 0-9 / -`; invalid requests are denied before any parsing or archiving.
 - Global rate limit defaults to 600 requests/minute.
-- A callsign with 20 failures within 5 minutes is temporarily blocked for 10 minutes. Only failures after the certificate chain has been verified count, so spoofed callsigns cannot affect legitimate users.
+- A callsign with 20 failures within 5 minutes is temporarily blocked for 10 minutes. Only failures after the proof has been verified and the requested username matches the certificate callsign count, so replayed certificate packages cannot affect legitimate users.
 - `http.maxPasswordBytes` rejects oversized password fields.
 - Untrusted values are escaped before being written to the plain-text log.
 

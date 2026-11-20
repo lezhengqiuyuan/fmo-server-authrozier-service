@@ -613,6 +613,7 @@ internal sealed class Config
         config!.Log ??= new();
         config!.Update ??= new();
         config!.Archive ??= new();
+        config!.Acl ??= new();
 
         return config!;
     }
@@ -667,6 +668,7 @@ internal sealed class Config
         config!.Log ??= new();
         config!.Update ??= new();
         config!.Archive ??= new();
+        config!.Acl ??= new();
 
         return config!;
     }
