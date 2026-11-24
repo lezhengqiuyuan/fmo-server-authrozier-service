@@ -99,6 +99,20 @@ For a temporary emergency network, a certificate hierarchy can be generated on s
 
 ---
 
+## System Requirements
+
+SAS is published as a .NET 10 self-contained single-file binary. **Self-contained only means that no .NET runtime installation is required; it does not mean the binary runs on any legacy OS.** The .NET 10 official support matrix applies:
+
+| Platform | Minimum | Architecture | Notes |
+|----------|---------|--------------|-------|
+| Windows | Windows 10 1607 / Windows Server 2012 | x64 | Windows Server 2012 / 2012 R2 require ESU; Windows Server 2016 or later is recommended |
+| Linux | glibc 2.27+; recommended: Ubuntu 22.04+ / Debian 13+ / RHEL 8+; or musl 1.2.3+; recommended: Alpine 3.21+ | x64 / ARM64 | The Docker image provided in this repository is recommended |
+| macOS | macOS 15+ | Apple Silicon / Intel | Limited by the .NET 10 support matrix |
+
+> **Do not deploy SAS on Windows 7 or Windows Server 2008 R2.** These operating systems are not supported by .NET 10. On Windows Server 2008 R2, .NET 10 GC Regions are known to add a fixed ~4 GiB to the kernel paged pool (Pool Paged Bytes). That memory is not allocated by SAS application code and cannot be removed by upgrading SAS. Upgrade the operating system, or deploy on Linux / Docker instead.
+
+---
+
 ## Installation
 
 ### From the Device Management Dashboard (Recommended)

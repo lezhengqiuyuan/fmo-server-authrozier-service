@@ -99,6 +99,20 @@ FMO（FM Over Internet）Server Authorizer Service 是面向业余无线电 FMO 
 
 ---
 
+## 系统要求
+
+SAS 以 .NET 10 自包含单文件发布。**自包含只表示无需安装 .NET 运行时，不表示可以在任意旧系统上运行**；实际可运行范围受 .NET 10 官方支持矩阵约束：
+
+| 平台 | 最低版本 | 架构 | 说明 |
+|------|----------|------|------|
+| Windows | Windows 10 1607 / Windows Server 2012 | x64 | Windows Server 2012 / 2012 R2 需启用 ESU；推荐 Windows Server 2016 或更高 |
+| Linux | glibc 2.27+，建议 Ubuntu 22.04+ / Debian 13+ / RHEL 8+；或 musl 1.2.3+，建议 Alpine 3.21+ | x64 / ARM64 | 推荐使用仓库提供的 Docker 镜像 |
+| macOS | macOS 15+ | Apple Silicon / Intel | 以 .NET 10 支持范围为准 |
+
+> **不要在 Windows 7 / Windows Server 2008 R2 上部署 SAS。** 这些系统不在 .NET 10 支持列表内。已知在 Windows Server 2008 R2 上运行时，.NET 10 的 GC Regions 可能使内核分页池（Pool Paged Bytes）固定增加约 4 GiB；该占用不属于 SAS 业务代码分配的内存，升级 SAS 版本也无法消除。请升级操作系统，或改用 Linux / Docker 部署。
+
+---
+
 ## 获取与安装
 
 ### 通过设备管理后台获取（推荐）
